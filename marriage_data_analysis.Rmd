@@ -1,0 +1,325 @@
+---
+title: "Projekt"
+author: "Patrycja Milo 173182, Natalia Rozner 173205"
+date: "20.06.2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Pary małżeńskie w USA: spostrzeżenia dotyczące pracy i gospodarstwa domowego
+
+Wczytanie bibliotek
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(corrplot)
+library(graphics)
+library(gridExtra)
+```
+
+Wczytanie zbioru danych
+```{r}
+USA_malzenstwa <- read.csv("./data.txt")
+```
+
+Sprawdzenie braków danych
+```{r}
+anyNA(USA_malzenstwa)
+```
+
+Wyświetlenie struktury danych
+```{r}
+str(USA_malzenstwa)
+```
+
+Usunięcie niepotrzebnej kolumny
+```{r}
+data <- data.frame(USA_malzenstwa[,c(-1)])
+```
+
+## 1. Przedstawienie ilości osób pracujących w domu w 1975
+
+Zliczanie liczby małżeństw pracujących w domu
+```{r}
+(praca_w_domu <- sum(data$work == "yes"))
+```
+
+Obliczanie procentowego udziału małżeństw pracujących w domu (nrow - zlicza liczbę wierszy, digits = 2 - dwa miejsca po przecinku)
+```{r}
+procentowo_praca_w_domu <- round((praca_w_domu / nrow(data)) * 100, digits = 2)
+```
+
+Wyświetlanie wyniku
+```{r}
+cat("Procent małżeństw pracujących w domu:", procentowo_praca_w_domu, "%\n")
+```
+
+## 2. Porównanie liczby godzin pracy rocznie między mężczyznami a kobietami
+
+Zmienna ta ma powtarzać wartość "Kobieta" i "Mężczyzna" dla odpowiedniej liczby wierszy w ramce danych (razem 1506 rekordów)
+```{r}
+płeć <- rep(c("Kobieta", "Mężczyzna"), each = nrow(data))
+```
+
+Tworzenie ramki danych dla porównania godzin pracy kobiet i mężczyzn
+```{r}
+godziny_pracy_data <- data.frame(Płeć = płeć, Godziny = c(data$hoursw, data$hoursh))
+```
+
+Tworzenie wykresu słupkowego, funkcja tapply oblicza średnią liczbę godzin pracy dla każdej płci
+```{r}
+barplot(tapply(godziny_pracy_data$Godziny, godziny_pracy_data$Płeć, mean), 
+        names.arg = c("Kobieta", "Mężczyzna"),
+        xlab = "Płeć", ylab = "Średnia liczba godzin pracy rocznie",
+        main = "Porównanie liczby godzin pracy między płciami",
+        col = c("pink", "green"))
+```
+
+## 3. Dzieci
+
+Obliczanie liczby wszystkich dzieci w gospodarstwie domowym
+```{r}
+liczba_dzieci <- data$child6 + data$child618
+```
+
+Obliczanie średniej liczby dzieci w gospodarstwie domowym
+```{r}
+srednia_dzieci <- round(mean(liczba_dzieci), digits = 2)
+```
+
+Obliczanie procentowego udziału gospodarstw domowych z dziećmi
+```{r}
+procent_z_dziecmi <- round((sum(liczba_dzieci > 0) / nrow(data)) * 100)
+```
+
+Obliczanie najmniejszej i największej liczby dzieci w gospodarstwie domowym
+```{r}
+min_dzieci <- min(liczba_dzieci)
+max_dzieci <- max(liczba_dzieci)
+```
+
+Tworzenie podsumowania
+```{r}
+dzieci <- data.frame(
+  Srednia_Liczba_Dzieci = srednia_dzieci,
+  Procent_Gospodarstw_z_Dziecmi = procent_z_dziecmi,
+  Najmniejsza_Liczba_Dzieci = min_dzieci,
+  Najwieksza_Liczba_Dzieci = max_dzieci
+)
+```
+
+Wyświetlanie podsumowania
+```{r}
+print(dzieci)
+```
+
+## 4. Zależność między poziomem wykształcenia a zarobkami mężczyzn
+
+Porównanie zarobków mężczyzn według poziomu wykształcenia, średnie zarobki (wageh) pogrupowane według poziomu wykształcenia (educh)
+```{r}
+agregacja_wyksztalcenie_zarobki <- aggregate(wageh ~ educh, data = data, FUN = mean)
+```
+
+Sortowanie poziomów wykształcenia rosnąco według poziomów wykształcenia
+```{r}
+agregacja_wyksztalcenie_zarobki <- agregacja_wyksztalcenie_zarobki[order(agregacja_wyksztalcenie_zarobki$educh), ]
+```
+
+Tworzenie gradientu kolorystycznego
+```{r}
+gradient_kolorow <- colorRampPalette(c("blue", "red"))
+```
+
+Obliczanie kolorów dla słupków na podstawie gradientu (liczba kolorów jest równa liczbie poziomów wykształcenia)
+```{r}
+kolor_slupek <- gradient_kolorow(length(agregacja_wyksztalcenie_zarobki$wageh))
+```
+
+Wykres słupkowy przedstawiający zależność między poziomem wykształcenia a zarobkami mężczyzn
+Słupki na wykresie reprezentują średnie zarobki na godzinę (wageh) dla poszczególnych poziomów wykształcenia (educh)
+```{r}
+barplot(agregacja_wyksztalcenie_zarobki$wageh, names.arg = agregacja_wyksztalcenie_zarobki$educh,
+        xlab = "Poziom wykształcenia w latach", ylab = "Średnie zarobki na godzinę w $",
+        main = "Średnie zarobki mężczyzn według poziomu wykształcenia",
+        col = kolor_slupek)
+```
+
+## 5. Zależność między dochodem rodziny a ilością dzieci
+
+Tworzenie nowej ramki danych z dwoma zmiennymi: dochód rodziny i ilosc dzieci
+```{r}
+dochod_i_dzieci <- data.frame(Dochod_Rodziny = data$income, Ilosc_Dzieci = data$child6 + data$child618)
+```
+
+Wykres liniowy (geom_smooth: dodanie linii regresji, geom_point: dodanie punktów danych(alpha - przezroczystosc punktow))
+lm - liniowa regresja, se = FALSE - bez prawdopobienstwa linii regresji, dzieki czemu wykres jest bardziej przejerzysty)
+```{r}
+ggplot(dochod_i_dzieci, aes(x = Dochod_Rodziny, y = Ilosc_Dzieci)) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  geom_point(color = "gray", size = 3, alpha = 0.5) +
+  labs(title = "Zależność między dochodem rodziny a ilością dzieci",
+       x = "Dochód rodziny",
+       y = "Ilość dzieci") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+## 6. Porównanie dochodu kobiet, który został zgłoszony, a który został zarobiony
+
+Tworzenie ramki danych(funkcja factor() konwertuje wektor na czynnik (factor) o nazwie "Rok")
+Czynniki są używane w celu reprezentowania zmiennych kategorycznych.)
+```{r}
+porownanie_zarobkow <- data.frame(
+  Rok = factor(c(rep("1975", nrow(data)), rep("1976", nrow(data)))),
+  Zarobki = c(data$hearnw, data$wagew))
+```
+
+Wykres
+```{r}
+ggplot(porownanie_zarobkow, aes(x = Rok, y = Zarobki)) +
+  geom_point(color = "blue") +
+  labs(title = "Porównanie zarobków na godzinę żony 
+       w 1975 roku i zgłoszonych w wywiadzie 1976",
+       x = "Rok",
+       y = "Zarobki na godzinę") +
+  theme_minimal()
+```
+
+## 7. Obliczanie procentu rodzin w najgorszych wynikach zarobków
+```{r}
+procentyl = quantile(data$income, 0.1)
+```
+
+Dochód jest mniejszy lub równy wartości procentylu
+```{r}
+ubostwo <- subset(data, income <= procentyl)
+```
+
+Wykres - liczba dzieci
+```{r}
+wykres_dzieci <- ggplot(ubostwo, aes(x = "", fill = factor(child6 + child618))) +
+  geom_bar(width = 1, color = "white") +
+  coord_polar("y") +
+  labs(title = "Liczba dzieci w rodzinach 
+       w ubóstwie",
+       fill = "Liczba dzieci",
+       x = "") +
+  theme_void() 
+```
+
+Wykres - miejsce zamieszkania
+```{r}
+wykres_lokalizacja <- ggplot(ubostwo, aes(x = "", fill = city)) +
+  geom_bar(width = 1, color = "white") +
+  coord_polar("y") +
+  labs(title = "Lokalizacja rodzin w ubóstwie",
+       fill = "Miasto",
+       x = "") +
+  theme_void() +
+  geom_text(aes(label = scales::percent(..count../sum(..count..))), stat = "count", position = position_stack(vjust = 0.5))
+```
+
+Wykres - wiek matki
+```{r}
+wykres_wiek_matki <- ggplot(ubostwo, aes(x = "", fill = cut(agew, breaks = c(0, 20, 30, 40, 50, 60, Inf)))) +
+  geom_bar(width = 1, color = "white") +
+  coord_polar("y") +
+  labs(title = "Wiek matki w rodzinach 
+       w ubóstwie",
+       fill = "Wiek matki",
+       x = "") +
+  theme_void() +
+  geom_text(aes(label = scales::percent(..count../sum(..count..))), stat = "count", position = position_stack(vjust = 0.5))
+```
+
+Wykres - wiek ojca
+```{r}
+wykres_wiek_ojca <- ggplot(ubostwo, aes(x = "", fill = cut(ageh, breaks = c(0, 20, 30, 40, 50, 60, Inf)))) +
+  geom_bar(width = 1, color = "white") +
+  coord_polar("y") +
+  labs(title = "Wiek ojca w rodzinach w ubóstwie",
+       fill = "Wiek ojca",
+       x = "") +
+  theme_void() +
+  geom_text(aes(label = scales::percent(..count../sum(..count..))), stat = "count", position = position_stack(vjust = 0.5))
+```
+
+Wyświetlanie wykresów w jednym oknie (wykresy kolowe)
+```{r}
+grid.arrange(wykres_dzieci, wykres_lokalizacja, wykres_wiek_matki, wykres_wiek_ojca,
+             ncol = 2, widths = c(1, 1), heights = c(1, 1))
+```
+
+dzięki tej linijce geom_text(aes(label = scales::percent(..count../sum(..count..))), stat = "count", position = position_stack(vjust = 0.5))
+możemy dodać etykiety procentowe obok słupków na wykresie, informując o procentowym udziale danej kategorii (liczby dzieci, lokalizacji, wieku matki, wieku ojca)
+
+
+## 8. Analiza rodzin z dziećmi i bez
+
+Analiza dla rodzin z dziećmi
+```{r}
+df_z_dziecmi <- subset(data, child6 + child618 > 0)
+```
+
+Wykres - wykształcenie matki
+```{r}
+wykres_wyksztalcenie_matki <- ggplot(df_z_dziecmi, aes(x = educwm)) +
+  geom_bar(fill = "red") +
+  labs(title = 
+         "Wykształcenie matki 
+       w rodzinach z dziećmi",
+       x = "Wykształcenie matki",
+       y = "Ilość osób") +
+  theme_minimal()
+```
+
+Wykres - wykształcenie ojca
+```{r}
+wykres_wyksztalcenie_ojca <- ggplot(df_z_dziecmi, aes(x = educwf)) +
+  geom_bar(fill = "green") +
+  labs(title = 
+        "Wykształcenie ojca 
+       w rodzinach z dziećmi",
+       x = "Wykształcenie ojca",
+       y = "Ilość osób") +
+  theme_minimal()
+```
+
+Analiza dla rodzin bez dzieci
+```{r}
+df_bez_dzieci <- subset(data, child6 + child618 == 0)
+```
+
+Wykres - wykształcenie żony
+```{r}
+wykres_wyksztalcenie_zony <- ggplot(df_bez_dzieci, aes(x = educw)) +
+  geom_bar(fill = "pink") +
+  labs(title = 
+        "Wykształcenie żony 
+       w rodzinach bez dzieci ",
+       x = "Wykształcenie żony",
+       y = "Ilość osób") +
+  theme_minimal()
+```
+
+Wykres - wykształcenie męża
+```{r}
+wykres_wyksztalcenie_męża <- ggplot(df_bez_dzieci, aes(x = educh)) +
+  geom_bar(fill = "blue") +
+  labs(title = 
+        "Wykształcenie męża 
+       w rodzinach bez dzieci",
+       x = "Wykształcenie męża",
+       y = "Ilość osób") +
+  theme_minimal()
+```
+
+Wyświetlanie wykresów w jednym oknie
+```{r}
+grid.arrange(wykres_wyksztalcenie_matki, wykres_wyksztalcenie_ojca, wykres_wyksztalcenie_zony, wykres_wyksztalcenie_męża,
+             ncol = 2, widths = c(1, 1), heights = c(1, 1))
+```
